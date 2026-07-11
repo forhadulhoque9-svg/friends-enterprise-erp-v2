@@ -1,0 +1,246 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Custom sleek scrollbars for frosted glass theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Frosted Glass Theme Global Overrides for #app-workspace-root */
+#app-workspace-root {
+  color: #e2e8f0;
+}
+
+#app-workspace-root h1, 
+#app-workspace-root h2, 
+#app-workspace-root h3, 
+#app-workspace-root h4, 
+#app-workspace-root h5, 
+#app-workspace-root h6 {
+  color: #ffffff;
+}
+
+/* Force standard card elements inside the simulator to be Frosted Glass */
+#app-workspace-root .bg-white {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Make sure container states or list view sections match */
+#app-workspace-root .bg-slate-50,
+#app-workspace-root .bg-slate-50\/50,
+#app-workspace-root .bg-gray-50,
+#app-workspace-root .bg-slate-100 {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #f1f5f9 !important;
+}
+
+/* Form controls and inputs style */
+#app-workspace-root input,
+#app-workspace-root select,
+#app-workspace-root textarea {
+  background-color: rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+  border-radius: 0.75rem !important;
+}
+
+#app-workspace-root input::placeholder,
+#app-workspace-root textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+#app-workspace-root input:focus,
+#app-workspace-root select:focus,
+#app-workspace-root textarea:focus {
+  border-color: rgba(59, 130, 246, 0.6) !important;
+  background-color: rgba(0, 0, 0, 0.3) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+#app-workspace-root select option {
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+}
+
+/* text color utilities */
+#app-workspace-root .text-slate-900,
+#app-workspace-root .text-gray-900,
+#app-workspace-root .text-slate-800,
+#app-workspace-root .text-gray-800,
+#app-workspace-root .text-slate-700,
+#app-workspace-root .text-gray-700,
+#app-workspace-root .text-slate-600,
+#app-workspace-root .text-gray-600 {
+  color: #f8fafc !important;
+}
+
+#app-workspace-root .text-slate-500,
+#app-workspace-root .text-gray-500,
+#app-workspace-root .text-slate-400,
+#app-workspace-root .text-gray-400 {
+  color: #cbd5e1 !important;
+}
+
+/* Border styling utilities */
+#app-workspace-root .border-slate-100,
+#app-workspace-root .border-slate-200,
+#app-workspace-root .border-gray-100,
+#app-workspace-root .border-gray-200,
+#app-workspace-root .border-slate-300 {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Indigo components (primary elements) adjusted to theme colors */
+#app-workspace-root .bg-indigo-50 {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  color: #60a5fa !important;
+  border: 1px solid rgba(59, 130, 246, 0.25) !important;
+}
+#app-workspace-root .text-indigo-600,
+#app-workspace-root .text-indigo-700,
+#app-workspace-root .text-indigo-500 {
+  color: #60a5fa !important;
+}
+
+/* Success components (emerald) */
+#app-workspace-root .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+}
+#app-workspace-root .text-emerald-600,
+#app-workspace-root .text-emerald-700,
+#app-workspace-root .text-emerald-500 {
+  color: #34d399 !important;
+}
+
+/* Info components (sky/blue) */
+#app-workspace-root .bg-sky-50,
+#app-workspace-root .bg-blue-50 {
+  background-color: rgba(14, 165, 233, 0.15) !important;
+  color: #38bdf8 !important;
+  border: 1px solid rgba(14, 165, 233, 0.25) !important;
+}
+#app-workspace-root .text-sky-600,
+#app-workspace-root .text-sky-700,
+#app-workspace-root .text-blue-600,
+#app-workspace-root .text-blue-700 {
+  color: #38bdf8 !important;
+}
+
+/* Warnings/Dues (rose/red) */
+#app-workspace-root .bg-rose-50,
+#app-workspace-root .bg-red-50 {
+  background-color: rgba(244, 63, 94, 0.15) !important;
+  color: #fb7185 !important;
+  border: 1px solid rgba(244, 63, 94, 0.25) !important;
+}
+#app-workspace-root .text-rose-600,
+#app-workspace-root .text-rose-700,
+#app-workspace-root .text-red-600,
+#app-workspace-root .text-red-700 {
+  color: #fb7185 !important;
+}
+
+/* Warning components (orange/amber) */
+#app-workspace-root .bg-amber-50,
+#app-workspace-root .bg-orange-50 {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.25) !important;
+}
+#app-workspace-root .text-amber-600,
+#app-workspace-root .text-amber-700,
+#app-workspace-root .text-orange-600,
+#app-workspace-root .text-orange-700 {
+  color: #fbbf24 !important;
+}
+
+/* Indigo-600 / Indigo-700 buttons */
+#app-workspace-root .bg-indigo-600,
+#app-workspace-root .bg-indigo-700 {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+#app-workspace-root .bg-indigo-600:hover,
+#app-workspace-root .bg-indigo-700:hover {
+  background-color: #3b82f6 !important;
+}
+
+/* Table styling updates */
+#app-workspace-root table {
+  background: transparent !important;
+  color: #e2e8f0 !important;
+}
+
+#app-workspace-root tr {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+#app-workspace-root tr:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+#app-workspace-root th {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+#app-workspace-root td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Hover background states on cards/buttons */
+#app-workspace-root .hover\:bg-slate-50:hover,
+#app-workspace-root .hover\:bg-gray-50:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Dialog and Modals backdrop blur */
+.fixed.inset-0.z-50 {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background-color: rgba(15, 23, 42, 0.65) !important;
+}
+
+.fixed.inset-0.z-50 .bg-white {
+  background-color: rgba(30, 41, 59, 0.95) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}

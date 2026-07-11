@@ -1,0 +1,6 @@
+{
+  "name": "ফ্রেন্ডস এন্টারপ্রাইজ ইআরপি (Friends Enterprise ERP)",
+  "description": "এফএমসিজি (FMCG) পাইকারি ও পরিবেশক ব্যবসার জন্য অফলাইন ভিত্তিক সম্পূর্ণ বাংলা ইআরপি (ERP) সফটওয়্যার।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

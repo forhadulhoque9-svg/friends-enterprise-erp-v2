@@ -1,0 +1,6 @@
+{
+  "appId": "com.friendsenterprise.app",
+  "appName": "Friends Enterprise",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
