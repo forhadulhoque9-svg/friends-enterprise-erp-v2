@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Shop, CustomerLedger, Product, MarketVisitInvoice, HawlatRecord, InventoryLog, PurchaseRecord, ExpenseRecord, AppSettings, ProductReturn, DistributorReturn, DamagedStock } from './types';
+import { Shop, CustomerLedger, Product, MarketVisitInvoice, HawlatRecord, InventoryLog, PurchaseRecord, ExpenseRecord, AppSettings, ProductReturn, DistributorReturn, DamagedStock, Company, CompanyLedgerEntry } from './types';
 
 // Storage Keys
 const KEYS = {
@@ -19,6 +19,8 @@ const KEYS = {
   RETURNS: 'fe_erp_returns',
   DIST_RETURNS: 'fe_erp_dist_returns',
   DAMAGED: 'fe_erp_damaged',
+  COMPANIES: 'fe_erp_companies',
+  COMPANY_LEDGER: 'fe_erp_company_ledger',
 };
 
 // Initial Seed Data in Bengali
@@ -82,6 +84,8 @@ export const db = {
   getReturns: () => getLocal<ProductReturn[]>(KEYS.RETURNS, INITIAL_RETURNS),
   getDistReturns: () => getLocal<DistributorReturn[]>(KEYS.DIST_RETURNS, INITIAL_DIST_RETURNS),
   getDamagedStocks: () => getLocal<DamagedStock[]>(KEYS.DAMAGED, INITIAL_DAMAGED),
+  getCompanies: () => getLocal<Company[]>(KEYS.COMPANIES, []),
+  getCompanyLedgers: () => getLocal<CompanyLedgerEntry[]>(KEYS.COMPANY_LEDGER, []),
 
   // Save Lists
   saveShops: (shops: Shop[]) => setLocal(KEYS.SHOPS, shops),
@@ -96,6 +100,8 @@ export const db = {
   saveReturns: (returns: ProductReturn[]) => setLocal(KEYS.RETURNS, returns),
   saveDistReturns: (distReturns: DistributorReturn[]) => setLocal(KEYS.DIST_RETURNS, distReturns),
   saveDamagedStocks: (damaged: DamagedStock[]) => setLocal(KEYS.DAMAGED, damaged),
+  saveCompanies: (companies: Company[]) => setLocal(KEYS.COMPANIES, companies),
+  saveCompanyLedgers: (ledger: CompanyLedgerEntry[]) => setLocal(KEYS.COMPANY_LEDGER, ledger),
 
   // DB Backup-Restore Utils
   exportDatabase: (): string => {
@@ -112,6 +118,8 @@ export const db = {
       returns: db.getReturns(),
       distReturns: db.getDistReturns(),
       damagedStocks: db.getDamagedStocks(),
+      companies: db.getCompanies(),
+      companyLedgers: db.getCompanyLedgers(),
     };
     return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
   },
@@ -132,6 +140,8 @@ export const db = {
       if (data.returns) db.saveReturns(data.returns);
       if (data.distReturns) db.saveDistReturns(data.distReturns);
       if (data.damagedStocks) db.saveDamagedStocks(data.damagedStocks);
+      if (data.companies) db.saveCompanies(data.companies);
+      if (data.companyLedgers) db.saveCompanyLedgers(data.companyLedgers);
       return true;
     } catch (e) {
       console.error('Backup Import failed:', e);
@@ -152,5 +162,7 @@ export const db = {
     localStorage.removeItem(KEYS.RETURNS);
     localStorage.removeItem(KEYS.DIST_RETURNS);
     localStorage.removeItem(KEYS.DAMAGED);
+    localStorage.removeItem(KEYS.COMPANIES);
+    localStorage.removeItem(KEYS.COMPANY_LEDGER);
   }
 };

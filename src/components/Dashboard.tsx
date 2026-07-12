@@ -18,16 +18,32 @@ import {
   Percent,
   TrendingDown
 } from 'lucide-react';
-import { Shop, Product, MarketVisitInvoice, ExpenseRecord } from '../types';
+import { Shop, Product, MarketVisitInvoice, ExpenseRecord, Company, CompanyLedgerEntry } from '../types';
+import { 
+  Building,
+  Target,
+  ChevronRight,
+  Edit2,
+  Save
+} from 'lucide-react';
 
 interface DashboardProps {
   shops: Shop[];
   products: Product[];
   invoices: MarketVisitInvoice[];
   expenses: ExpenseRecord[];
+  companies?: Company[];
+  companyLedgers?: CompanyLedgerEntry[];
 }
 
-export default function Dashboard({ shops, products, invoices, expenses }: DashboardProps) {
+export default function Dashboard({ 
+  shops, 
+  products, 
+  invoices, 
+  expenses,
+  companies = [],
+  companyLedgers = []
+}: DashboardProps) {
   const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
 
@@ -36,15 +52,35 @@ export default function Dashboard({ shops, products, invoices, expenses }: Dashb
     return `৳${amount.toLocaleString('bn-BD')}`;
   };
 
-  const toBengaliNumber = (num: number) => {
+  const toBengaliNumber = (num: number | string) => {
     const bengaliDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
     return num.toString().replace(/\d/g, (digit) => bengaliDigits[parseInt(digit, 10)]);
+  };
+
+  const [forecastTarget, setForecastTarget] = useState(() => {
+    const saved = localStorage.getItem('fe_erp_forecast_target');
+    return saved ? parseFloat(saved) : 150000;
+  });
+  const [isEditingTarget, setIsEditingTarget] = useState(false);
+  const [targetInput, setTargetInput] = useState(forecastTarget.toString());
+
+  const handleSaveTarget = () => {
+    const parsed = parseFloat(targetInput);
+    if (!isNaN(parsed) && parsed >= 0) {
+      setForecastTarget(parsed);
+      localStorage.setItem('fe_erp_forecast_target', parsed.toString());
+      setIsEditingTarget(false);
+    }
   };
 
   // Calculations
   const todayStr = '2026-07-10'; // Simulated current date
   const currentMonth = '2026-07';
 
+  const dayOfMonth = parseInt(todayStr.split('-')[2], 10) || 10;
+  const daysPassed = dayOfMonth;
+  const totalDaysInMonth = 31; // July has 31 days
+  
   // 1. Today's Sales
   const todayInvoices = invoices.filter(inv => inv.date === todayStr);
   const todaySales = todayInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
@@ -52,6 +88,11 @@ export default function Dashboard({ shops, products, invoices, expenses }: Dashb
   // 2. Monthly Sales
   const monthlyInvoices = invoices.filter(inv => inv.date.startsWith(currentMonth));
   const monthlySales = monthlyInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+
+  const averageDailySales = daysPassed > 0 ? (monthlySales / daysPassed) : 0;
+  const estimatedMonthEndSales = averageDailySales * totalDaysInMonth;
+  const expectedAchievementPercent = forecastTarget > 0 ? (estimatedMonthEndSales / forecastTarget) * 100 : 0;
+  const projectedExceedsTarget = estimatedMonthEndSales >= forecastTarget;
 
   // 3. Collections (Today & Monthly)
   const todayCollections = todayInvoices.reduce((sum, inv) => sum + inv.totalPaid, 0);
@@ -302,6 +343,111 @@ export default function Dashboard({ shops, products, invoices, expenses }: Dashb
         </motion.div>
       </div>
 
+      {/* NEW FEATURE 4: SALES FORECAST WIDGET */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4" id="sales-forecast-widget">
+        <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Target className="w-5 h-5 text-indigo-500" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">মাসিক সেলস ফোরকাস্ট (Monthly Sales Forecast)</h3>
+              <p className="text-[11px] text-slate-400">বর্তমান বিক্রয় গতির ওপর ভিত্তি করে মাসের আনুমানিক হিসাব</p>
+            </div>
+          </div>
+
+          {/* Expected Achievement Indicator */}
+          <div className="flex items-center gap-2">
+            {projectedExceedsTarget ? (
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                টার্গেট পূরণ হবে (অন-ট্র্যাক)
+              </span>
+            ) : (
+              <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-pulse inline-block"></span>
+                টার্গেটের নিচে (ঝুঁকিপূর্ণ)
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Forecast Grid metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 text-xs">
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span className="block text-[9px] uppercase tracking-wider text-slate-400">আজকের মোট বিক্রি</span>
+            <span className="font-bold text-slate-800 text-sm mt-1 block">{formatTaka(todaySales)}</span>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span className="block text-[9px] uppercase tracking-wider text-slate-400">চলতি মাসের বিক্রি</span>
+            <span className="font-bold text-slate-800 text-sm mt-1 block">{formatTaka(monthlySales)}</span>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span className="block text-[9px] uppercase tracking-wider text-slate-400">চলতি মাসের অতিবাহিত দিন</span>
+            <span className="font-bold text-slate-800 text-sm mt-1 block">{toBengaliNumber(daysPassed)} / {toBengaliNumber(totalDaysInMonth)} দিন</span>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span className="block text-[9px] uppercase tracking-wider text-slate-400">দৈনিক গড় বিক্রি</span>
+            <span className="font-bold text-slate-800 text-sm mt-1 block">{formatTaka(Math.round(averageDailySales))}</span>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-1">
+            <span className="block text-[9px] uppercase tracking-wider text-slate-400">আনুমানিক মাস-শেষের বিক্রি</span>
+            <span className={`font-extrabold text-sm mt-1 block ${projectedExceedsTarget ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {formatTaka(Math.round(estimatedMonthEndSales))}
+            </span>
+          </div>
+
+          {/* Monthly Target (Editable directly in UI!) */}
+          <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50 relative">
+            <span className="block text-[9px] uppercase tracking-wider text-indigo-500 font-bold">চলতি মাসের টার্গেট</span>
+            {isEditingTarget ? (
+              <div className="flex items-center gap-1 mt-1">
+                <input
+                  type="number"
+                  value={targetInput}
+                  onChange={(e) => setTargetInput(e.target.value)}
+                  className="w-full bg-white border border-indigo-200 text-slate-800 rounded px-1.5 py-0.5 text-[11px] font-bold focus:outline-none"
+                  style={{ width: '65px' }}
+                />
+                <button onClick={handleSaveTarget} className="text-emerald-600 hover:text-emerald-800 cursor-pointer">
+                  <Save className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between mt-1">
+                <span className="font-bold text-indigo-950 text-sm">{formatTaka(forecastTarget)}</span>
+                <button onClick={() => { setTargetInput(forecastTarget.toString()); setIsEditingTarget(true); }} className="text-indigo-400 hover:text-indigo-600 cursor-pointer">
+                  <Edit2 className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span className="block text-[9px] uppercase tracking-wider text-slate-400">প্রত্যাশিত অর্জনের হার (%)</span>
+            <span className={`font-extrabold text-sm mt-1 block ${projectedExceedsTarget ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {toBengaliNumber(expectedAchievementPercent.toFixed(1))}%
+            </span>
+          </div>
+        </div>
+
+        {/* Performance Progress bar visual */}
+        <div className="space-y-1">
+          <div className="flex justify-between items-center text-[10px] text-slate-400">
+            <span>অর্জনের অগ্রগতি রেখা</span>
+            <span>টার্গেট: {formatTaka(forecastTarget)}</span>
+          </div>
+          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all duration-500 ${projectedExceedsTarget ? 'bg-emerald-500' : 'bg-rose-500'}`}
+              style={{ width: `${Math.min(expectedAchievementPercent, 100)}%` }}
+            ></div>
+          </div>
+        </div>
+      </div>
+
       {/* Stock Summary Small Info Card */}
       <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div className="flex items-center gap-3">
@@ -525,6 +671,118 @@ export default function Dashboard({ shops, products, invoices, expenses }: Dashb
           </div>
         </div>
 
+      </div>
+
+      {/* NEW FEATURE 3: COMPANY TARGET DASHBOARD SECTION */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm" id="company-target-dashboard">
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
+          <Building className="w-5 h-5 text-blue-500" />
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">কোম্পানি পারফরম্যান্স ড্যাশবোর্ড (Company Performance)</h3>
+            <p className="text-[11px] text-slate-400">কোম্পানি টার্গেট অর্জন এবং বিক্রয় অগ্রগতির সামগ্রিক চিত্র</p>
+          </div>
+        </div>
+
+        {companies.length === 0 ? (
+          <div className="text-center py-8 text-slate-400 text-xs">
+            <p>কোনো কোম্পানি যুক্ত করা হয়নি। কোম্পানি পারফরম্যান্স ট্র্যাকিং শুরু করতে কোম্পানি ম্যানেজমেন্ট মেনু থেকে কোম্পানি যুক্ত করুন।</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {companies.map((comp) => {
+              // 1. Primary Achievement: goods_received in current month
+              const primaryAchievement = companyLedgers
+                .filter(l => l.companyId === comp.id && l.type === 'goods_received' && l.date.startsWith(currentMonth))
+                .reduce((sum, l) => sum + l.amount, 0);
+
+              // 2. Secondary Achievement: sales of associated products in current month
+              const companyProducts = products.filter(p => p.companyId === comp.id);
+              const companyProductIds = new Set(companyProducts.map(p => p.id));
+              let secondaryAchievement = 0;
+              
+              invoices
+                .filter(inv => inv.date.startsWith(currentMonth))
+                .forEach(inv => {
+                  inv.entries.forEach(entry => {
+                    entry.items.forEach(item => {
+                      if (companyProductIds.has(item.productId)) {
+                        secondaryAchievement += item.quantity * item.price;
+                      }
+                    });
+                  });
+                });
+
+              const primaryPercent = comp.primaryTarget > 0 ? (primaryAchievement / comp.primaryTarget) * 100 : 0;
+              const secondaryPercent = comp.secondaryTarget > 0 ? (secondaryAchievement / comp.secondaryTarget) * 100 : 0;
+
+              return (
+                <div key={comp.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-4">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 bg-blue-500 rounded-full inline-block"></span>
+                      {comp.name}
+                    </h4>
+                    <span className="text-[10px] bg-slate-200/50 text-slate-600 font-bold px-2 py-0.5 rounded-md font-sans">
+                      {toBengaliNumber(companyProducts.length)}টি পণ্য সংযুক্ত
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    
+                    {/* Primary Target & Achievement */}
+                    <div className="space-y-1.5 bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">প্রাইমারি (কোম্পানি ক্রয়)</span>
+                      
+                      <div className="flex justify-between text-[11px] pt-1">
+                        <span className="text-slate-500">টার্গেট: {formatTaka(comp.primaryTarget)}</span>
+                        <span className="font-bold text-indigo-600">{formatTaka(primaryAchievement)}</span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="space-y-1 pt-1">
+                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                          <div 
+                            className="bg-indigo-500 h-full rounded-full transition-all duration-500"
+                            style={{ width: `${Math.min(primaryPercent, 100)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono">
+                          <span>অর্জিত</span>
+                          <span className="font-bold text-indigo-600">{toBengaliNumber(primaryPercent.toFixed(1))}%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Secondary Target & Achievement */}
+                    <div className="space-y-1.5 bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">সেকেন্ডারি (খুচরা বিক্রয়)</span>
+                      
+                      <div className="flex justify-between text-[11px] pt-1">
+                        <span className="text-slate-500">টার্গেট: {formatTaka(comp.secondaryTarget)}</span>
+                        <span className="font-bold text-emerald-600">{formatTaka(secondaryAchievement)}</span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="space-y-1 pt-1">
+                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                          <div 
+                            className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                            style={{ width: `${Math.min(secondaryPercent, 100)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono">
+                          <span>অর্জিত</span>
+                          <span className="font-bold text-emerald-600">{toBengaliNumber(secondaryPercent.toFixed(1))}%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Business Analytics Panel (বুদ্ধিদীপ্ত বিশ্লেষণ) */}

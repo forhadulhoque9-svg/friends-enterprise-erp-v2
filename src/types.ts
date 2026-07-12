@@ -32,6 +32,7 @@ export interface Product {
   piecesPerCarton: number; // e.g. 12, 24, 48
   stock: number; // total stock in pieces
   minStockAlert: number;
+  companyId?: string;
 }
 
 export interface SalesItem {
@@ -158,4 +159,23 @@ export interface AppSettings {
   isFingerprintEnabled: boolean;
   businessName: string;
   proprietorName: string;
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  openingDue: number;
+  primaryTarget: number;
+  secondaryTarget: number;
+}
+
+export interface CompanyLedgerEntry {
+  id: string;
+  companyId: string;
+  date: string;
+  type: 'opening' | 'payment' | 'goods_received' | 'damage_adj' | 'scheme_adj' | 'credit_note' | 'bonus_adj';
+  previousDue?: number;
+  amount: number;
+  currentBalance?: number;
+  note?: string;
 }

@@ -17,16 +17,18 @@ import {
   Tag,
   Boxes
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, Company } from '../types';
 
 interface ProductManagementProps {
   products: Product[];
+  companies?: Company[];
   onAddProduct: (product: Omit<Product, 'id'>) => void;
   onEditProduct: (product: Product) => void;
 }
 
 export default function ProductManagement({
   products,
+  companies = [],
   onAddProduct,
   onEditProduct
 }: ProductManagementProps) {
@@ -45,6 +47,7 @@ export default function ProductManagement({
   const [cartonQuantity, setCartonQuantity] = useState(''); // carton quantity stock
   const [pieceQuantity, setPieceQuantity] = useState(''); // remainder pieces stock
   const [minStockAlert, setMinStockAlert] = useState('15');
+  const [companyId, setCompanyId] = useState('');
   const [editId, setEditId] = useState('');
 
   // Categories extraction
@@ -85,7 +88,8 @@ export default function ProductManagement({
       sellingPriceCarton: parseFloat(sellingPriceCarton) || (parseFloat(sellingPrice) * finalPiecesPerCarton),
       piecesPerCarton: finalPiecesPerCarton,
       stock: computedStock,
-      minStockAlert: parseInt(minStockAlert) || 10
+      minStockAlert: parseInt(minStockAlert) || 10,
+      companyId: companyId || undefined
     });
 
     // Reset
@@ -98,6 +102,7 @@ export default function ProductManagement({
     setCartonQuantity('');
     setPieceQuantity('');
     setMinStockAlert('15');
+    setCompanyId('');
     setIsAddOpen(false);
   };
 
@@ -114,6 +119,7 @@ export default function ProductManagement({
     setCartonQuantity(Math.floor(p.stock / finalPiecesPerCarton).toString());
     setPieceQuantity((p.stock % finalPiecesPerCarton).toString());
     setMinStockAlert(p.minStockAlert.toString());
+    setCompanyId(p.companyId || '');
     setIsEditOpen(true);
   };
 
@@ -136,9 +142,11 @@ export default function ProductManagement({
       sellingPriceCarton: parseFloat(sellingPriceCarton) || (parseFloat(sellingPrice) * finalPiecesPerCarton),
       piecesPerCarton: finalPiecesPerCarton,
       stock: computedStock,
-      minStockAlert: parseInt(minStockAlert) || 10
+      minStockAlert: parseInt(minStockAlert) || 10,
+      companyId: companyId || undefined
     });
 
+    setCompanyId('');
     setIsEditOpen(false);
   };
 
@@ -226,7 +234,17 @@ export default function ProductManagement({
                           </div>
                           <div>
                             <p className="font-bold text-slate-800">{p.name}</p>
-                            <p className="text-[10px] text-slate-400">আইডি: {toBengaliNumber(p.id.replace('p', ''))}</p>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                              <p className="text-[10px] text-slate-400">আইডি: {toBengaliNumber(p.id.replace('p', ''))}</p>
+                              {p.companyId && (
+                                <>
+                                  <span className="text-[9px] text-slate-300">•</span>
+                                  <span className="text-[9px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.2 rounded border border-blue-100">
+                                    {companies.find(c => c.id === p.companyId)?.name || 'অজানা কোম্পানি'}
+                                  </span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -425,6 +443,20 @@ export default function ProductManagement({
                 </div>
 
                 <div>
+                  <label className="block font-semibold text-slate-600 mb-1">কোম্পানি সংযুক্তিকরণ (ঐচ্ছিক)</label>
+                  <select
+                    value={companyId}
+                    onChange={(e) => setCompanyId(e.target.value)}
+                    className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 bg-white"
+                  >
+                    <option value="">কোনো কোম্পানি নেই (None)</option>
+                    {companies.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="block font-semibold text-slate-600 mb-1">সতর্ক সংকেত সীমা (পিস)</label>
                   <input 
                     type="number" 
@@ -572,6 +604,20 @@ export default function ProductManagement({
                       className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 font-mono"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">কোম্পানি সংযুক্তিকরণ (ঐচ্ছিক)</label>
+                  <select
+                    value={companyId}
+                    onChange={(e) => setCompanyId(e.target.value)}
+                    className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 bg-white"
+                  >
+                    <option value="">কোনো কোম্পানি নেই (None)</option>
+                    {companies.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

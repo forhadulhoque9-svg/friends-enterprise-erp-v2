@@ -32,11 +32,12 @@ import {
   FileBarChart,
   Settings,
   Battery,
-  Wifi
+  Wifi,
+  Building
 } from 'lucide-react';
 
 import { db } from './db';
-import { Shop, Product, CustomerLedger, MarketVisitInvoice, HawlatRecord, InventoryLog, PurchaseRecord, ExpenseRecord, AppSettings, ProductReturn, DistributorReturn, DamagedStock } from './types';
+import { Shop, Product, CustomerLedger, MarketVisitInvoice, HawlatRecord, InventoryLog, PurchaseRecord, ExpenseRecord, AppSettings, ProductReturn, DistributorReturn, DamagedStock, Company, CompanyLedgerEntry } from './types';
 
 // Screen Components
 import Dashboard from './components/Dashboard';
@@ -48,6 +49,7 @@ import InventoryManagement from './components/InventoryManagement';
 import PurchaseManagement from './components/PurchaseManagement';
 import Reports from './components/Reports';
 import SettingsPage from './components/SettingsPage';
+import CompanyManagement from './components/CompanyManagement';
 
 export default function App() {
   // Offline State variables
@@ -62,6 +64,8 @@ export default function App() {
   const [returns, setReturns] = useState<ProductReturn[]>([]);
   const [distReturns, setDistReturns] = useState<DistributorReturn[]>([]);
   const [damagedStocks, setDamagedStocks] = useState<DamagedStock[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companyLedgers, setCompanyLedgers] = useState<CompanyLedgerEntry[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
   // App Lock security state
@@ -90,6 +94,8 @@ export default function App() {
     setReturns(db.getReturns());
     setDistReturns(db.getDistReturns());
     setDamagedStocks(db.getDamagedStocks());
+    setCompanies(db.getCompanies());
+    setCompanyLedgers(db.getCompanyLedgers());
     
     const loadedSettings = db.getSettings();
     setSettings(loadedSettings);
@@ -163,6 +169,16 @@ export default function App() {
   const saveDamagedStocksState = (newDam: DamagedStock[]) => {
     setDamagedStocks(newDam);
     db.saveDamagedStocks(newDam);
+  };
+
+  const saveCompaniesState = (newComp: Company[]) => {
+    setCompanies(newComp);
+    db.saveCompanies(newComp);
+  };
+
+  const saveCompanyLedgersState = (newLeds: CompanyLedgerEntry[]) => {
+    setCompanyLedgers(newLeds);
+    db.saveCompanyLedgers(newLeds);
   };
 
   const saveSettingsState = (newSet: AppSettings) => {
@@ -496,6 +512,52 @@ export default function App() {
     saveInventoryLogsState(tempLogs);
   };
 
+  // --- Company Management Handlers ---
+  const handleAddCompany = (companyData: Omit<Company, 'id'>) => {
+    const newId = `c-${Date.now()}`;
+    const newCompany: Company = { id: newId, ...companyData };
+    saveCompaniesState([newCompany, ...companies]);
+
+    if (companyData.openingDue > 0) {
+      const openingEntry: CompanyLedgerEntry = {
+        id: `cl-op-${Date.now()}`,
+        companyId: newId,
+        date: new Date().toISOString().split('T')[0],
+        type: 'opening',
+        amount: companyData.openingDue,
+        note: 'প্রারম্ভিক বকেয়া দেনা'
+      };
+      saveCompanyLedgersState([openingEntry, ...companyLedgers]);
+    }
+  };
+
+  const handleEditCompany = (updatedCompany: Company) => {
+    const nextComp = companies.map(c => c.id === updatedCompany.id ? updatedCompany : c);
+    saveCompaniesState(nextComp);
+  };
+
+  const handleDeleteCompany = (id: string) => {
+    const nextComp = companies.filter(c => c.id !== id);
+    saveCompaniesState(nextComp);
+
+    const nextLeds = companyLedgers.filter(l => l.companyId !== id);
+    saveCompanyLedgersState(nextLeds);
+
+    const nextProducts = products.map(p => p.companyId === id ? { ...p, companyId: undefined } : p);
+    saveProductsState(nextProducts);
+  };
+
+  const handleAddCompanyLedgerEntry = (entryData: Omit<CompanyLedgerEntry, 'id' | 'currentBalance' | 'previousDue'>) => {
+    const newId = `cl-${Date.now()}`;
+    const newEntry: CompanyLedgerEntry = { id: newId, ...entryData };
+    saveCompanyLedgersState([newEntry, ...companyLedgers]);
+  };
+
+  const handleDeleteCompanyLedgerEntry = (id: string) => {
+    const nextLeds = companyLedgers.filter(l => l.id !== id);
+    saveCompanyLedgersState(nextLeds);
+  };
+
   // 9. Register Hawlat record (Borrow/Return cash or products)
   const handleRegisterHawlat = (recordData: Omit<HawlatRecord, 'id'>) => {
     const newId = `h${Date.now()}`;
@@ -562,7 +624,16 @@ export default function App() {
   const renderActiveScreen = () => {
     switch (activeScreen) {
       case 'dashboard':
-        return <Dashboard shops={shops} products={products} invoices={invoices} expenses={expenses} />;
+        return (
+          <Dashboard 
+            shops={shops} 
+            products={products} 
+            invoices={invoices} 
+            expenses={expenses} 
+            companies={companies}
+            companyLedgers={companyLedgers}
+          />
+        );
       case 'customers':
         return (
           <CustomerManagement 
@@ -578,8 +649,22 @@ export default function App() {
         return (
           <ProductManagement 
             products={products} 
+            companies={companies}
             onAddProduct={handleAddProduct} 
             onEditProduct={handleEditProduct} 
+          />
+        );
+      case 'company-management':
+        return (
+          <CompanyManagement
+            companies={companies}
+            companyLedgers={companyLedgers}
+            products={products}
+            onAddCompany={handleAddCompany}
+            onEditCompany={handleEditCompany}
+            onDeleteCompany={handleDeleteCompany}
+            onAddLedgerEntry={handleAddCompanyLedgerEntry}
+            onDeleteLedgerEntry={handleDeleteCompanyLedgerEntry}
           />
         );
       case 'sales':
@@ -652,6 +737,7 @@ export default function App() {
     { id: 'dashboard', label: 'ড্যাশবোর্ড', icon: LayoutDashboard },
     { id: 'customers', label: 'দোকান ও কাস্টমার', icon: Users },
     { id: 'products', label: 'পণ্য তালিকা', icon: Box },
+    { id: 'company-management', label: 'কোম্পানি ম্যানেজমেন্ট', icon: Building },
     { id: 'sales', label: 'বিক্রয় (মার্কেট ভিজিট)', icon: ShoppingBag },
     { id: 'hawlat', label: 'ডিস্ট্রিবিউটর হাওলাত', icon: Layers },
     { id: 'inventory', label: 'ইনভেন্টরি স্টক', icon: History },
