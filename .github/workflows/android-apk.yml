@@ -45,8 +45,9 @@ jobs:
         run: |
           echo "=== Keystore Fingerprint ==="
           keytool -list -v -keystore android/app/release.keystore -storepass friendsenterprise -alias friends_key
-          echo "=== APK Signatures ==="
-          apksigner verify --print-certs android/app/build/outputs/apk/release/app-release.apk
+          echo "=== Gradle Signing Report ==="
+          cd android
+          ./gradlew signingReport
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
