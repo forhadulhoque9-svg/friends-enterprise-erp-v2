@@ -106,6 +106,9 @@ export function getChecksum(str: string): string {
 }
 
 export const BackupHelper = {
+  // Callback hook for Google Drive sync to avoid circular dependencies
+  onAutoBackupTriggered: null as (() => void) | null,
+
   // Toggle Auto Backup state
   isAutoBackupEnabled: (): boolean => {
     const val = localStorage.getItem(AUTO_BACKUP_ENABLED_KEY);
@@ -152,6 +155,10 @@ export const BackupHelper = {
     // Save state checksum to avoid duplicate auto-backups immediately
     localStorage.setItem(LAST_BACKUP_HASH_KEY, checksum);
     
+    if (BackupHelper.onAutoBackupTriggered) {
+      BackupHelper.onAutoBackupTriggered();
+    }
+    
     return newItem;
   },
 
@@ -183,6 +190,10 @@ export const BackupHelper = {
 
     // Update last backup checksum
     localStorage.setItem(LAST_BACKUP_HASH_KEY, checksum);
+
+    if (BackupHelper.onAutoBackupTriggered) {
+      BackupHelper.onAutoBackupTriggered();
+    }
 
     return newItem;
   },

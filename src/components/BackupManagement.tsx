@@ -1,5 +1,5 @@
 /**
- * Friends Enterprise ERP - Backup & Restore Management Component
+ * Friends Enterprise ERP - Backup & Restore Management Component with Google Drive Integration
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,32 +15,53 @@ import {
   ToggleRight, 
   History, 
   Trash2, 
+  Cloud, 
   CloudOff, 
   HardDrive, 
   FileJson, 
+  Wifi, 
   WifiOff,
   UserCheck,
   ShieldCheck,
-  Settings
+  Settings,
+  LogIn,
+  LogOut,
+  Clock
 } from 'lucide-react';
 import { BackupHelper, BackupHistoryItem } from '../utils/backupHelper';
+import { initAuth, googleSignIn, logout, getAccessToken } from '../utils/firebaseAuth';
+import { 
+  listDriveBackups, 
+  restoreFromDriveFile, 
+  triggerGoogleDriveBackup, 
+  hasPendingBackup, 
+  processPendingUploads, 
+  isOnline, 
+  deleteDriveBackup,
+  DriveBackupFile 
+} from '../utils/gdriveSync';
 
 interface BackupManagementProps {
   onRestoreSuccess: () => void;
 }
 
 export default function BackupManagement({ onRestoreSuccess }: BackupManagementProps) {
+  // Local Backup State
   const [history, setHistory] = useState<BackupHistoryItem[]>([]);
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
   const [dragActive, setDragActive] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Load state on mount
-  useEffect(() => {
-    setHistory(BackupHelper.getBackupHistory());
-    setAutoBackupEnabled(BackupHelper.isAutoBackupEnabled());
-  }, []);
+  // Google Drive Cloud State
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [googleUser, setGoogleUser] = useState<{ email: string | null; name: string | null }>({ email: null, name: null });
+  const [driveBackups, setDriveBackups] = useState<DriveBackupFile[]>([]);
+  const [gdriveAutoEnabled, setGdriveAutoEnabled] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [online, setOnline] = useState(isOnline());
+  const [pendingQueue, setPendingQueue] = useState(hasPendingBackup());
 
+  // Show status banner notification
   const showStatus = (type: 'success' | 'error', text: string) => {
     setStatusMsg({ type, text });
     setTimeout(() => {
@@ -48,6 +69,211 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
     }, 5000);
   };
 
+  // Fetch backups list from Google Drive
+  const fetchDriveBackups = async () => {
+    if (!isOnline()) return;
+    setIsSyncing(true);
+    try {
+      const files = await listDriveBackups();
+      setDriveBackups(files);
+      setPendingQueue(hasPendingBackup());
+    } catch (e) {
+      console.error('Error fetching Google Drive backups:', e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Load state and listen to auth/network on mount
+  useEffect(() => {
+    setHistory(BackupHelper.getBackupHistory());
+    setAutoBackupEnabled(BackupHelper.isAutoBackupEnabled());
+
+    // Load GDrive Auto Backup Toggle preference
+    const savedGDriveAuto = localStorage.getItem('fe_erp_gdrive_auto_backup');
+    setGdriveAutoEnabled(savedGDriveAuto === null ? true : savedGDriveAuto === 'true');
+
+    // Initialize Firebase Auth Listener
+    const unsubscribeAuth = initAuth(
+      (user, token) => {
+        setIsSignedIn(true);
+        setGoogleUser({ email: user.email, name: user.displayName });
+        // Initial Drive fetch on sign-in
+        fetchDriveBackups();
+        // Check for any pending offline backups to process
+        processPendingUploads().then(didUpload => {
+          if (didUpload) {
+            showStatus('success', 'অফলাইনে তৈরি পেন্ডিং ব্যাকআপ সফলভাবে গুগল ড্রাইভে সিঙ্ক করা হয়েছে!');
+            setPendingQueue(false);
+            fetchDriveBackups();
+          }
+        });
+      },
+      () => {
+        setIsSignedIn(false);
+        setGoogleUser({ email: null, name: null });
+        setDriveBackups([]);
+      }
+    );
+
+    // Network Online/Offline status listeners
+    const handleOnline = () => {
+      setOnline(true);
+      // Sync pending offline backup if signed in
+      if (getAccessToken()) {
+        processPendingUploads().then(didUpload => {
+          if (didUpload) {
+            showStatus('success', 'নেটওয়ার্ক সংযুক্ত! পেন্ডিং ব্যাকআপ গুগল ড্রাইভে আপলোড করা হয়েছে।');
+            setPendingQueue(false);
+            fetchDriveBackups();
+          }
+        });
+      }
+    };
+    const handleOffline = () => {
+      setOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Setup Callback in BackupHelper to sync with Google Drive automatically
+    BackupHelper.onAutoBackupTriggered = async () => {
+      const isGDriveAuto = localStorage.getItem('fe_erp_gdrive_auto_backup') !== 'false';
+      if (isGDriveAuto && getAccessToken()) {
+        setIsSyncing(true);
+        const result = await triggerGoogleDriveBackup();
+        setPendingQueue(hasPendingBackup());
+        if (result === 'synced') {
+          fetchDriveBackups();
+        }
+        setIsSyncing(false);
+      }
+    };
+
+    return () => {
+      unsubscribeAuth();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      BackupHelper.onAutoBackupTriggered = null;
+    };
+  }, []);
+
+  // Google Sign In handler
+  const handleConnectDrive = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        setIsSignedIn(true);
+        setGoogleUser({ email: result.user.email, name: result.user.displayName });
+        showStatus('success', 'সফলভাবে গুগল অ্যাকাউন্ট সংযুক্ত করা হয়েছে!');
+        // Trigger sync of current data immediately
+        const backupResult = await triggerGoogleDriveBackup();
+        if (backupResult === 'synced') {
+          showStatus('success', 'প্রথম ডেটা ব্যাকআপ সফলভাবে গুগল ড্রাইভে ক্লাউড সিঙ্ক করা হয়েছে!');
+        }
+        await fetchDriveBackups();
+      }
+    } catch (err: any) {
+      console.error('Sign-in failed:', err);
+      showStatus('error', 'গুগল সংযোগ স্থাপন করতে ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন।');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Google Log Out handler
+  const handleDisconnectDrive = async () => {
+    const confirmLogout = window.confirm('আপনি কি গুগল অ্যাকাউন্ট সংযোগ বিচ্ছিন্ন করতে চান? এটি করার পরও আপনার স্থানীয় অফলাইন ব্যাকআপ নিরাপদ থাকবে।');
+    if (!confirmLogout) return;
+
+    try {
+      await logout();
+      setIsSignedIn(false);
+      setGoogleUser({ email: null, name: null });
+      setDriveBackups([]);
+      showStatus('success', 'গুগল অ্যাকাউন্ট সফলভাবে বিচ্ছিন্ন করা হয়েছে।');
+    } catch (err) {
+      showStatus('error', 'সংযোগ বিচ্ছিন্ন করতে সমস্যা হয়েছে।');
+    }
+  };
+
+  // Force trigger Google Drive manual backup
+  const handleGDriveBackupNow = async () => {
+    if (!isSignedIn) {
+      showStatus('error', 'অনুগ্রহ করে প্রথমে গুগল অ্যাকাউন্ট সংযুক্ত করুন।');
+      return;
+    }
+    
+    setIsSyncing(true);
+    try {
+      // Force = true to bypass checksum comparison
+      const result = await triggerGoogleDriveBackup(true);
+      setPendingQueue(hasPendingBackup());
+      
+      if (result === 'synced') {
+        showStatus('success', 'সফলভাবে গুগল ড্রাইভে নতুন ব্যাকআপ ফাইল তৈরি করা হয়েছে!');
+        await fetchDriveBackups();
+      } else if (result === 'queued') {
+        showStatus('success', 'অফলাইন থাকার কারণে ব্যাকআপটি কিউতে রাখা হয়েছে, নেটওয়ার্ক পেলেই ড্রাইভে আপলোড হবে।');
+      } else {
+        showStatus('success', 'গুগল ড্রাইভে ব্যাকআপ সফলভাবে প্রসেস করা হয়েছে।');
+        await fetchDriveBackups();
+      }
+    } catch (e) {
+      showStatus('error', 'গুগল ড্রাইভে ব্যাকআপ আপলোড করতে ব্যর্থ হয়েছে।');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Restore DB from selected Google Drive File
+  const handleGDriveRestore = async (fileId: string, filename: string) => {
+    const confirmRestore = window.confirm(
+      `আপনি কি নিশ্চিতভাবে গুগল ড্রাইভের ব্যাকআপ ফাইল "${filename}" থেকে ডেটা রিস্টোর করতে চান? এটি আপনার বর্তমান সকল স্থানীয় ডেটা পরিবর্তন করে ফেলবে।`
+    );
+    if (!confirmRestore) return;
+
+    setIsSyncing(true);
+    try {
+      const success = await restoreFromDriveFile(fileId);
+      if (success) {
+        onRestoreSuccess();
+        setHistory(BackupHelper.getBackupHistory());
+        showStatus('success', 'অভিনন্দন! গুগল ড্রাইভ থেকে ডেটাবেজ সফলভাবে রিস্টোর করা হয়েছে!');
+      } else {
+        showStatus('error', 'ডেটা রিস্টোর করতে ব্যর্থ হয়েছে। ফাইলটি ভুল অথবা ত্রুটিযুক্ত হতে পারে।');
+      }
+    } catch (err: any) {
+      showStatus('error', err.message || 'রিস্টোর ব্যর্থ হয়েছে।');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Delete specific Google Drive Backup File
+  const handleDeleteDriveFile = async (fileId: string, filename: string) => {
+    const confirmDel = window.confirm(`আপনি কি গুগল ড্রাইভ থেকে "${filename}" ব্যাকআপ ফাইলটি চিরতরে মুছে ফেলতে চান?`);
+    if (!confirmDel) return;
+
+    setIsSyncing(true);
+    try {
+      const success = await deleteDriveBackup(fileId);
+      if (success) {
+        showStatus('success', 'গুগল ড্রাইভ থেকে ফাইলটি মুছে ফেলা হয়েছে।');
+        await fetchDriveBackups();
+      } else {
+        showStatus('error', 'ফাইলটি মুছতে ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন।');
+      }
+    } catch (e) {
+      showStatus('error', 'মুছে ফেলার প্রসেসে সমস্যা হয়েছে।');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Toggle Auto Backup (Device Local)
   const handleToggleAutoBackup = () => {
     const nextVal = !autoBackupEnabled;
     setAutoBackupEnabled(nextVal);
@@ -55,6 +281,15 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
     showStatus('success', `স্বয়ংক্রিয় ব্যাকআপ ${nextVal ? 'চালু' : 'বন্ধ'} করা হয়েছে।`);
   };
 
+  // Toggle Auto Backup (Google Drive Cloud)
+  const handleToggleGDriveAuto = () => {
+    const nextVal = !gdriveAutoEnabled;
+    setGdriveAutoEnabled(nextVal);
+    localStorage.setItem('fe_erp_gdrive_auto_backup', nextVal ? 'true' : 'false');
+    showStatus('success', `গুগল ড্রাইভ অটো ক্লাউড ব্যাকআপ ${nextVal ? 'চালু' : 'বন্ধ'} করা হয়েছে।`);
+  };
+
+  // Create manual local backup and trigger file download
   const handleManualBackup = () => {
     try {
       const backup = BackupHelper.createManualBackup();
@@ -66,6 +301,7 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
     }
   };
 
+  // Restore database from device uploaded file
   const handleRestoreFromData = (encryptedData: string) => {
     const confirmRestore = window.confirm(
       'আপনি কি নিশ্চিতভাবে এই ব্যাকআপটি রিস্টোর করতে চান? এটি আপনার বর্তমান সকল ডেটা পরিবর্তন করে ব্যাকআপের ডেটা সেট করবে।'
@@ -101,7 +337,6 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
       showStatus('error', 'ফাইল পড়তে ব্যর্থ হয়েছে।');
     };
     reader.readAsText(file);
-    // Reset file input
     e.target.value = '';
   };
 
@@ -143,6 +378,7 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
     showStatus('success', 'ব্যাকআপ পয়েন্টটি তালিকা থেকে মুছে ফেলা হয়েছে।');
   };
 
+  // Bengali translation formatting helpers
   const formatBengaliNumber = (num: number | string) => {
     const bengaliDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
     return num.toString().replace(/\d/g, (digit) => bengaliDigits[parseInt(digit, 10)]);
@@ -172,9 +408,23 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
     return `${formatBengaliNumber(day)} ${month}, ${formatBengaliNumber(year)} - ${timeStr}`;
   };
 
-  // Stats calculation
+  const formatISOToBengaliDateTime = (isoString: string) => {
+    const timestamp = Date.parse(isoString);
+    if (isNaN(timestamp)) return isoString;
+    return formatBengaliDateTime(timestamp);
+  };
+
+  // Stats summary calculation
   const lastBackup = history.length > 0 ? history[0] : null;
   const totalBackupSize = history.reduce((sum, item) => sum + item.size, 0);
+
+  // Sync network and queue descriptions
+  const getNetworkStatusLabel = () => {
+    if (!online) {
+      return pendingQueue ? 'অফলাইন (কিউতে জমাকৃত)' : 'অফলাইন (ডিসকানেক্টেড)';
+    }
+    return pendingQueue ? 'অনলাইন (সিঙ্ক করা হচ্ছে...)' : 'সংযুক্ত (সরাসরি সিঙ্ক)';
+  };
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 font-sans">
@@ -223,8 +473,8 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
             <HardDrive className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">মোট ব্যাকআপ সাইজ</p>
-            <p className="text-base font-bold text-slate-800 mt-0.5">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">মোট লোকাল সাইজ</p>
+            <p className="text-sm font-bold text-slate-800 mt-0.5">
               {formatFileSize(totalBackupSize)}
             </p>
             <p className="text-[10px] text-slate-500">
@@ -236,7 +486,7 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
         {/* Stat 3: Auto Backup Switch */}
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-            <RefreshCcw className="w-6 h-6" />
+            <RefreshCcw className={`w-6 h-6 ${isSyncing ? 'animate-spin text-emerald-500' : ''}`} />
           </div>
           <div className="flex-1">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">অটো ব্যাকআপ স্ট্যাটাস</p>
@@ -255,15 +505,210 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
 
         {/* Stat 4: Sync Status */}
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-            <CloudOff className="w-6 h-6" />
+          <div className={`p-3 rounded-xl ${isSignedIn ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
+            <Cloud className={`w-6 h-6 ${isSyncing ? 'animate-bounce' : ''}`} />
           </div>
-          <div>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">ইন্টারনেট সিঙ্ক স্ট্যাটাস</p>
-            <p className="text-xs font-bold text-slate-800 mt-0.5">১০০% সুরক্ষিত অফলাইন</p>
-            <p className="text-[10px] text-slate-500">গুগল ড্রাইভ বন্ধ রয়েছে</p>
+          <div className="flex-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">গুগল ড্রাইভ সিঙ্ক</p>
+            <p className="text-xs font-bold text-slate-800 mt-0.5">
+              {isSignedIn ? 'সংযুক্ত (Connected)' : 'সংযোগহীন'}
+            </p>
+            <p className="text-[10px] text-slate-500 font-medium truncate">
+              {isSignedIn ? googleUser.email : 'গুগল ড্রাইভ বন্ধ'}
+            </p>
           </div>
         </div>
+      </div>
+
+      {/* Google Drive Cloud Backup Settings & Status Dashboard */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4" id="module-gdrive-cloud-settings">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Cloud className={`w-5 h-5 ${isSignedIn ? 'text-indigo-600 animate-pulse' : 'text-slate-400'}`} />
+            <h3 className="font-bold text-slate-800 text-sm">গুগল ড্রাইভ ক্লাউড ব্যাকআপ (Google Drive Cloud Sync)</h3>
+          </div>
+          {isSyncing && (
+            <span className="flex items-center gap-1.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full animate-pulse">
+              <RefreshCcw className="w-3 h-3 animate-spin" /> সিঙ্ক করা হচ্ছে...
+            </span>
+          )}
+        </div>
+        
+        <p className="text-xs text-slate-500 leading-relaxed">
+          আপনার সফটওয়্যারের সকল ডেটা নিরাপদে আপনার নিজস্ব গুগল ড্রাইভে সংরক্ষণ করুন। ড্রাইভ ব্যাকআপ চালু থাকলে যেকোনো সময়ে আপনার মূল্যবান ডেটা ক্লাউড থেকে রিস্টোর করতে পারবেন।
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+          {/* Status Panel */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+            <h4 className="text-xs font-bold text-slate-700">গুগল অ্যাকাউন্ট সিঙ্ক বিবরণী:</h4>
+            <div className="space-y-2 text-xs text-slate-600">
+              <div className="flex items-center justify-between">
+                <span>সংযুক্ত অ্যাকাউন্ট:</span>
+                <span className={`font-bold ${isSignedIn ? 'text-indigo-600' : 'text-slate-500'} text-[11px] flex items-center gap-1`}>
+                  {isSignedIn ? (
+                    <>
+                      <UserCheck className="w-3.5 h-3.5" />
+                      {googleUser.name} ({googleUser.email})
+                    </>
+                  ) : 'সংযুক্ত নেই (Disabled)'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>সিঙ্ক ফোল্ডার:</span>
+                <span className={`font-bold ${isSignedIn ? 'text-slate-700' : 'text-slate-400'}`}>
+                  {isSignedIn ? 'Friends Enterprise ERP Backup' : 'নিষ্ক্রিয় (Inactive)'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>ইন্টারনেট সিঙ্ক স্ট্যাটাস:</span>
+                <span className={`inline-flex items-center gap-1 font-bold ${online ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {online ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+                  {getNetworkStatusLabel()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>ক্লাউড অটো সিঙ্ক:</span>
+                <span className={`inline-block font-bold text-[9px] px-2.5 py-0.5 rounded-full ${gdriveAutoEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                  {gdriveAutoEnabled ? 'সক্রিয় (ON)' : 'নিষ্ক্রিয় (OFF)'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* User Settings/Options Panel */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col justify-between space-y-4">
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-bold text-slate-700">ড্রাইভ সিঙ্ক সেটিংস ও টগল:</h4>
+              <p className="text-[10px] text-slate-500 leading-relaxed">
+                {isSignedIn 
+                  ? 'আপনার গুগল অ্যাকাউন্ট সফলভাবে সংযুক্ত আছে। সফটওয়্যারের কোনো পরিবর্তন হলে ড্রাইভে স্বয়ংক্রিয় ব্যাকআপ আপলোড করা হবে।' 
+                  : 'গুগল ড্রাইভ ব্যাকআপ শুরু করতে নিচের বাটনে ক্লিক করে অ্যাকাউন্ট কানেক্ট করুন। আপনার ডেটা এনক্রিপ্ট হয়ে ড্রাইভে জমা থাকবে।'}
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              {/* Google Drive Auto Backup Toggle */}
+              {isSignedIn && (
+                <div className="flex items-center justify-between border-t border-b border-slate-200/50 py-2">
+                  <span className="text-xs font-bold text-slate-700">স্বয়ংক্রিয় ক্লাউড ব্যাকআপ</span>
+                  <button 
+                    onClick={handleToggleGDriveAuto}
+                    className="text-indigo-600 focus:outline-none"
+                    title={gdriveAutoEnabled ? 'অটো ব্যাকআপ বন্ধ করুন' : 'অটো ব্যাকআপ চালু করুন'}
+                  >
+                    {gdriveAutoEnabled ? (
+                      <ToggleRight className="w-10 h-10 text-emerald-500" />
+                    ) : (
+                      <ToggleLeft className="w-10 h-10 text-slate-400" />
+                    )}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                {!isSignedIn ? (
+                  <button
+                    onClick={handleConnectDrive}
+                    disabled={isSyncing}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-1.5 shadow-sm hover:from-blue-700 hover:to-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    গুগল অ্যাকাউন্ট সংযুক্ত করুন
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleGDriveBackupNow}
+                      disabled={isSyncing}
+                      className="flex-1 bg-emerald-600 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 shadow-sm hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                    >
+                      <RefreshCcw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                      ম্যানুয়ালি সিঙ্ক করুন (Backup Now)
+                    </button>
+                    <button
+                      onClick={handleDisconnectDrive}
+                      disabled={isSyncing}
+                      className="bg-rose-50 text-rose-600 font-bold text-xs py-2.5 px-4 rounded-xl border border-rose-200 hover:bg-rose-100 flex items-center gap-1 transition-all"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      সংযোগ বিচ্ছিন্ন
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Google Drive Rolling Restore Points */}
+        {isSignedIn && (
+          <div className="pt-2">
+            <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-1.5">
+              <History className="w-4 h-4 text-indigo-600" />
+              গুগল ড্রাইভ ক্লাউড ব্যাকআপ হিস্টোরি (Google Drive Restore Points)
+            </h4>
+
+            {driveBackups.length === 0 ? (
+              <div className="text-center p-8 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                <Database className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-400">গুগল ড্রাইভে কোনো ব্যাকআপ ফাইল পাওয়া যায়নি।</p>
+                <button
+                  onClick={handleGDriveBackupNow}
+                  className="text-xs text-indigo-600 font-bold hover:underline"
+                >
+                  প্রথম ক্লাউড ব্যাকআপ তৈরি করতে এখানে ক্লিক করুন
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-left border-collapse" id="tbl-gdrive-backup-history">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-600 font-bold text-[10px] border-b border-slate-100">
+                      <th className="p-3">ক্রমিক</th>
+                      <th className="p-3">ফাইলের নাম</th>
+                      <th className="p-3">তৈরির সময় ও তারিখ</th>
+                      <th className="p-3">ফাইলের আকার</th>
+                      <th className="p-3 text-right">কার্যক্রম (Actions)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-xs text-slate-700 divide-y divide-slate-100">
+                    {driveBackups.map((item, index) => (
+                      <tr key={item.id} className="hover:bg-slate-50/50 transition-all">
+                        <td className="p-3 font-semibold text-slate-400">{formatBengaliNumber(index + 1)}</td>
+                        <td className="p-3 font-medium text-slate-800 flex items-center gap-1">
+                          <Cloud className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                          <span className="truncate max-w-[200px]" title={item.name}>{item.name}</span>
+                        </td>
+                        <td className="p-3 font-medium text-slate-600">{formatISOToBengaliDateTime(item.createdTime)}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-600">{formatFileSize(item.size)}</td>
+                        <td className="p-3 text-right flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleGDriveRestore(item.id, item.name)}
+                            disabled={isSyncing}
+                            className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-500 text-white hover:bg-indigo-600 rounded-lg font-bold text-[10px] shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                            title="গুগল ড্রাইভ থেকে রিস্টোর করুন"
+                          >
+                            <RefreshCcw className="w-3 h-3" />
+                            রিস্টোর
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDriveFile(item.id, item.name)}
+                            disabled={isSyncing}
+                            className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition-all disabled:opacity-50"
+                            title="মুছে ফেলুন"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Primary Action Modules Grid */}
@@ -296,7 +741,7 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
           </div>
         </div>
 
-        {/* Module B: Device Local Restore */}
+        {/* Module B: Device From Restore */}
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
             <Upload className="w-5 h-5 text-emerald-600" />
@@ -417,69 +862,6 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
             </table>
           </div>
         )}
-      </div>
-
-      {/* Module D: Google Drive Cloud Backup Settings Status */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4" id="module-gdrive-cloud-settings">
-        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-          <CloudOff className="w-5 h-5 text-amber-500" />
-          <h3 className="font-bold text-slate-800 text-sm">ক্লাউড সিঙ্ক্রোনাইজেশন সেটিংস (Google Drive Cloud Settings)</h3>
-        </div>
-        
-        <p className="text-xs text-slate-500 leading-relaxed">
-          আপনার ডেটা ক্লাউডে সংরক্ষণের জন্য গুগল ড্রাইভ সিঙ্ক সেটিংস নিচে প্রদর্শন করা হলো:
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-          {/* Status Panel */}
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-            <h4 className="text-xs font-bold text-slate-700">গুগল অ্যাকাউন্ট সিঙ্ক বিবরণী:</h4>
-            <div className="space-y-2 text-xs text-slate-600">
-              <div className="flex items-center justify-between">
-                <span>সংযুক্ত অ্যাকাউন্ট:</span>
-                <span className="font-bold text-slate-500 text-[11px]">সংযুক্ত নেই (Disabled)</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>সিঙ্ক ফোল্ডার:</span>
-                <span className="font-bold text-slate-400">নিষ্ক্রিয় (Inactive)</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>সিঙ্ক অপশন স্ট্যাটাস:</span>
-                <span className="inline-block bg-slate-200 text-slate-600 font-bold text-[9px] px-2 py-0.5 rounded-full">
-                  OFF
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* User Settings/Options Panel */}
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col justify-between">
-            <div className="space-y-1.5">
-              <h4 className="text-xs font-bold text-slate-700">গুগল ড্রাইভ কানেকশন সেটিংস:</h4>
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                ব্যবহারকারীর স্পষ্ট নির্দেশ অনুসারে গুগল ড্রাইভ ও ক্লাউড সিঙ্ক ফিচারটি নিষ্ক্রিয় করা হয়েছে। আপনার সকল ডেটা আপনার ডিভাইসের অভ্যন্তরে সম্পূর্ণ নিরাপদ ও ১০০% অফলাইনে সংরক্ষিত রয়েছে।
-              </p>
-            </div>
-            
-            <div className="flex flex-wrap gap-2 pt-3">
-              <button
-                disabled
-                className="flex-1 opacity-50 cursor-not-allowed bg-slate-200 text-slate-500 font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 border border-slate-300"
-                title="গুগল ড্রাইভ নিষ্ক্রিয় করা রয়েছে"
-              >
-                <WifiOff className="w-4 h-4" />
-                গুগল অ্যাকাউন্ট সংযুক্ত করুন
-              </button>
-              <button
-                disabled
-                className="opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 font-bold text-xs py-2.5 px-3 rounded-xl border border-slate-200"
-                title="গুগল ড্রাইভ নিষ্ক্রিয় করা রয়েছে"
-              >
-                সংযোগ বিচ্ছিন্ন
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
