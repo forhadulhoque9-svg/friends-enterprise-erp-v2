@@ -50,6 +50,8 @@ import PurchaseManagement from './components/PurchaseManagement';
 import Reports from './components/Reports';
 import SettingsPage from './components/SettingsPage';
 import CompanyManagement from './components/CompanyManagement';
+import BackupManagement from './components/BackupManagement';
+import { BackupHelper } from './utils/backupHelper';
 
 export default function App() {
   // Offline State variables
@@ -119,71 +121,85 @@ export default function App() {
   const saveShopsState = (newShops: Shop[]) => {
     setShops(newShops);
     db.saveShops(newShops);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveProductsState = (newProds: Product[]) => {
     setProducts(newProds);
     db.saveProducts(newProds);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveLedgersState = (newLeds: CustomerLedger[]) => {
     setLedgers(newLeds);
     db.saveLedgers(newLeds);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveInvoicesState = (newInvs: MarketVisitInvoice[]) => {
     setInvoices(newInvs);
     db.saveInvoices(newInvs);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveHawlatsState = (newHaws: HawlatRecord[]) => {
     setHawlats(newHaws);
     db.saveHawlats(newHaws);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveInventoryLogsState = (newLogs: InventoryLog[]) => {
     setInventoryLogs(newLogs);
     db.saveInventoryLogs(newLogs);
+    BackupHelper.triggerAutoBackup();
   };
 
   const savePurchasesState = (newPurch: PurchaseRecord[]) => {
     setPurchases(newPurch);
     db.savePurchases(newPurch);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveExpensesState = (newExp: ExpenseRecord[]) => {
     setExpenses(newExp);
     db.saveExpenses(newExp);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveReturnsState = (newRet: ProductReturn[]) => {
     setReturns(newRet);
     db.saveReturns(newRet);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveDistReturnsState = (newDistRet: DistributorReturn[]) => {
     setDistReturns(newDistRet);
     db.saveDistReturns(newDistRet);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveDamagedStocksState = (newDam: DamagedStock[]) => {
     setDamagedStocks(newDam);
     db.saveDamagedStocks(newDam);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveCompaniesState = (newComp: Company[]) => {
     setCompanies(newComp);
     db.saveCompanies(newComp);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveCompanyLedgersState = (newLeds: CompanyLedgerEntry[]) => {
     setCompanyLedgers(newLeds);
     db.saveCompanyLedgers(newLeds);
+    BackupHelper.triggerAutoBackup();
   };
 
   const saveSettingsState = (newSet: AppSettings) => {
     setSettings(newSet);
     db.saveSettings(newSet);
+    BackupHelper.triggerAutoBackup();
   };
 
   // --- CONTROLLERS ---
@@ -620,6 +636,28 @@ export default function App() {
     setIsLocked(false);
   };
 
+  const handleRestoreSuccess = () => {
+    setShops(db.getShops());
+    setProducts(db.getProducts());
+    setLedgers(db.getLedgers());
+    setInvoices(db.getInvoices());
+    setHawlats(db.getHawlats());
+    setInventoryLogs(db.getInventoryLogs());
+    setPurchases(db.getPurchases());
+    setExpenses(db.getExpenses());
+    setReturns(db.getReturns());
+    setDistReturns(db.getDistReturns());
+    setDamagedStocks(db.getDamagedStocks());
+    setCompanies(db.getCompanies());
+    setCompanyLedgers(db.getCompanyLedgers());
+    
+    const loadedSettings = db.getSettings();
+    setSettings(loadedSettings);
+    if (!loadedSettings.isAppLockEnabled) {
+      setIsLocked(false);
+    }
+  };
+
   // App Layout Renderer based on chosen screen
   const renderActiveScreen = () => {
     switch (activeScreen) {
@@ -717,6 +755,12 @@ export default function App() {
             purchases={purchases} 
           />
         );
+      case 'backup-restore':
+        return (
+          <BackupManagement 
+            onRestoreSuccess={handleRestoreSuccess} 
+          />
+        );
       case 'settings':
         return (
           <SettingsPage 
@@ -743,6 +787,7 @@ export default function App() {
     { id: 'inventory', label: 'ইনভেন্টরি স্টক', icon: History },
     { id: 'purchase', label: 'ক্রয় এন্ট্রি (Purchase)', icon: BadgeCent },
     { id: 'reports', label: 'রিপোর্ট সমূহ', icon: FileBarChart },
+    { id: 'backup-restore', label: 'ব্যাকআপ ও রিস্টোর', icon: Database },
     { id: 'settings', label: 'সেটিংস ও নিরাপত্তা', icon: Settings },
   ];
 
