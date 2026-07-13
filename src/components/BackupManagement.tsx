@@ -52,6 +52,12 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
   const [dragActive, setDragActive] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleContainerClick = () => {
+    fileInputRef.current?.click();
+  };
+
   // Google Drive Cloud State
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [googleUser, setGoogleUser] = useState<{ email: string | null; name: string | null }>({ email: null, name: null });
@@ -753,6 +759,7 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
 
           {/* Drag and Drop File Input Area */}
           <div 
+            onClick={handleContainerClick}
             onDragEnter={handleDrag}
             onDragOver={handleDrag}
             onDragLeave={handleDrag}
@@ -766,10 +773,10 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
           >
             <input 
               type="file" 
+              ref={fileInputRef}
               accept=".json"
               onChange={handleFileUpload}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              title="এনক্রিপ্টেড ব্যাকআপ ফাইল সিলেক্ট করুন"
+              className="hidden"
             />
             <div className="space-y-2 pointer-events-none">
               <FileJson className="w-8 h-8 text-slate-400 mx-auto" />

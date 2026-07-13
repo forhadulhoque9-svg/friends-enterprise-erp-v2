@@ -4,6 +4,9 @@
  */
 
 import { db } from '../db';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 export interface BackupHistoryItem {
   id: string;
@@ -25,19 +28,25 @@ const SECRET_KEY = 'FriendsEnterpriseERPv2SecretKey2026';
  * Encrypts cleartext into base64 encoded and obfuscated cipher
  */
 export function encryptBackup(text: string): string {
-  let result = '';
-  for (let i = 0; i < text.length; i++) {
-    const charCode = text.charCodeAt(i);
+  // 1. Convert Unicode text to standard base64
+  const base64Text = btoa(unescape(encodeURIComponent(text)));
+  
+  // 2. XOR each char of the base64 string
+  let xorChars = '';
+  for (let i = 0; i < base64Text.length; i++) {
+    const charCode = base64Text.charCodeAt(i);
     const keyChar = SECRET_KEY.charCodeAt(i % SECRET_KEY.length);
-    const xorValue = charCode ^ keyChar;
-    result += String.fromCharCode(xorValue);
+    xorChars += String.fromCharCode(charCode ^ keyChar);
   }
   
+  // 3. Encode the XOR'ed string to base64
+  const encryptedData = btoa(xorChars);
+  
   const payload = {
-    v: '1.0',
+    v: '2.0',
     app: 'FriendsEnterpriseERP',
     ts: Date.now(),
-    data: btoa(unescape(encodeURIComponent(result)))
+    data: encryptedData
   };
   
   return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
@@ -55,6 +64,19 @@ export function decryptBackup(encryptedBase64: string): string {
       throw new Error('Invalid backup file structure.');
     }
     
+    // If it's version 2.0 (our new safe format)
+    if (parsed.v === '2.0') {
+      const xorChars = atob(parsed.data);
+      let base64Text = '';
+      for (let i = 0; i < xorChars.length; i++) {
+        const charCode = xorChars.charCodeAt(i);
+        const keyChar = SECRET_KEY.charCodeAt(i % SECRET_KEY.length);
+        base64Text += String.fromCharCode(charCode ^ keyChar);
+      }
+      return decodeURIComponent(escape(atob(base64Text)));
+    }
+    
+    // Otherwise, fallback to the old version 1.0 format decryption
     const xorString = decodeURIComponent(escape(atob(parsed.data)));
     let result = '';
     for (let i = 0; i < xorString.length; i++) {
@@ -231,20 +253,44 @@ export const BackupHelper = {
   },
 
   // Trigger file download in browser/webview
-  downloadBackupFile: (backup: BackupHistoryItem) => {
-    const blob = new Blob([backup.data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    
+  downloadBackupFile: async (backup: BackupHistoryItem) => {
     const date = new Date(backup.timestamp);
     const dateString = date.toISOString().split('T')[0];
     const timeString = date.toTimeString().split(' ')[0].replace(/:/g, '-');
-    
-    link.href = url;
-    link.download = `friends_erp_backup_${dateString}_${timeString}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const filename = `friends_erp_backup_${dateString}_${timeString}.json`;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        // Write file locally to Cache directory so we can share it
+        const writeResult = await Filesystem.writeFile({
+          path: filename,
+          data: backup.data, // This is already the encrypted string (which is base64)
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8
+        });
+
+        // Open native share sheet so user can save it to files or share
+        await Share.share({
+          title: 'Friends ERP Backup',
+          text: 'Friends Enterprise ERP Encrypted Backup File',
+          url: writeResult.uri,
+          dialogTitle: 'Save or Share Backup File'
+        });
+      } catch (err) {
+        console.error('Capacitor native export error:', err);
+        alert('ফাইল সংরক্ষণ করতে ব্যর্থ হয়েছে: ' + JSON.stringify(err));
+      }
+    } else {
+      // Standard browser download
+      const blob = new Blob([backup.data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
   }
 };
