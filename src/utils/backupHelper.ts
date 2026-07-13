@@ -273,7 +273,7 @@ export const BackupHelper = {
         await Share.share({
           title: 'Friends ERP Backup',
           text: 'Friends Enterprise ERP Encrypted Backup File',
-          url: writeResult.uri,
+          files: [writeResult.uri],
           dialogTitle: 'Save or Share Backup File'
         });
       } catch (err) {

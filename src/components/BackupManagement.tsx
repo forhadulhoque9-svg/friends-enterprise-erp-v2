@@ -774,7 +774,7 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
             <input 
               type="file" 
               ref={fileInputRef}
-              accept=".json"
+              accept="application/json,.json"
               onChange={handleFileUpload}
               className="hidden"
             />
