@@ -276,9 +276,19 @@ export const BackupHelper = {
           files: [writeResult.uri],
           dialogTitle: 'Save or Share Backup File'
         });
-      } catch (err) {
-        console.error('Capacitor native export error:', err);
-        alert('ফাইল সংরক্ষণ করতে ব্যর্থ হয়েছে: ' + JSON.stringify(err));
+      } catch (err: any) {
+        console.error('Capacitor native file export error:', err);
+        
+        // Fail-safe Fallback: Share the encrypted data as text if file provider/storage fails
+        try {
+          await Share.share({
+            title: 'Friends ERP Backup Text',
+            text: backup.data,
+            dialogTitle: 'Copy or Share Backup Data'
+          });
+        } catch (shareTextErr: any) {
+          throw new Error('ফাইল সংরক্ষণ বা শেয়ার করতে ব্যর্থ হয়েছে: ' + (err.message || JSON.stringify(err)));
+        }
       }
     } else {
       // Standard browser download

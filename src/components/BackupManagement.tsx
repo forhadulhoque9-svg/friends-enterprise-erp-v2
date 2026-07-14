@@ -28,6 +28,7 @@ import {
   LogOut,
   Clock
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { BackupHelper, BackupHistoryItem } from '../utils/backupHelper';
 import { initAuth, googleSignIn, logout, getAccessToken } from '../utils/firebaseAuth';
 import { 
@@ -295,15 +296,25 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
     showStatus('success', `গুগল ড্রাইভ অটো ক্লাউড ব্যাকআপ ${nextVal ? 'চালু' : 'বন্ধ'} করা হয়েছে।`);
   };
 
+  // Create a handler for individual backup downloads
+  const handleDownloadBackup = async (item: BackupHistoryItem) => {
+    try {
+      await BackupHelper.downloadBackupFile(item);
+      showStatus('success', 'ব্যাকআপ ফাইল সফলভাবে ডাউনলোড/শেয়ার করা হয়েছে!');
+    } catch (e: any) {
+      showStatus('error', e.message || 'ডাউনলোড ব্যর্থ হয়েছে।');
+    }
+  };
+
   // Create manual local backup and trigger file download
-  const handleManualBackup = () => {
+  const handleManualBackup = async () => {
     try {
       const backup = BackupHelper.createManualBackup();
-      BackupHelper.downloadBackupFile(backup);
+      await BackupHelper.downloadBackupFile(backup);
       setHistory(BackupHelper.getBackupHistory());
       showStatus('success', 'সম্পূর্ণ এনক্রিপ্টেড ব্যাকআপ ফাইল সফলভাবে তৈরি ও ডাউনলোড করা হয়েছে!');
-    } catch (e) {
-      showStatus('error', 'ব্যাকআপ তৈরি করতে ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন।');
+    } catch (e: any) {
+      showStatus('error', e.message || 'ব্যাকআপ তৈরি করতে ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন।');
     }
   };
 
@@ -331,6 +342,12 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      showStatus('error', 'দয়া করে একটি বৈধ .json ব্যাকআপ ফাইল সিলেক্ট করুন।');
+      e.target.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -774,7 +791,7 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
             <input 
               type="file" 
               ref={fileInputRef}
-              accept="application/json,.json"
+              accept={Capacitor.isNativePlatform() ? "*/*" : "application/json,.json"}
               onChange={handleFileUpload}
               className="hidden"
             />
@@ -841,7 +858,7 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
                     <td className="p-3 font-mono text-[11px] text-slate-600">{formatFileSize(item.size)}</td>
                     <td className="p-3 text-right flex items-center justify-end gap-2">
                       <button
-                        onClick={() => BackupHelper.downloadBackupFile(item)}
+                        onClick={() => handleDownloadBackup(item)}
                         className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
                         title="ডাউনলোড করুন"
                       >
