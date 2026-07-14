@@ -55,8 +55,48 @@ export default function BackupManagement({ onRestoreSuccess }: BackupManagementP
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleContainerClick = () => {
-    fileInputRef.current?.click();
+  const handleContainerClick = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { FilePicker } = await import('@capawesome/capacitor-file-picker');
+        const result = await FilePicker.pickFiles({
+          types: ['application/json', 'text/plain', '*/*'],
+          readData: true,
+          limit: 1
+        });
+
+        if (result.files && result.files.length > 0) {
+          const pickedFile = result.files[0];
+          let fileContentText = '';
+
+          if (pickedFile.data) {
+            try {
+              fileContentText = decodeURIComponent(escape(atob(pickedFile.data)));
+            } catch (e) {
+              fileContentText = atob(pickedFile.data);
+            }
+          }
+
+          if (!fileContentText) {
+            showStatus('error', 'ফাইলটি খালি বা পড়া যায়নি!');
+            return;
+          }
+
+          // Validate file contents or extension
+          if (!pickedFile.name.toLowerCase().endsWith('.json') && !fileContentText.trim().startsWith('{')) {
+            showStatus('error', 'দয়া করে একটি বৈধ .json ব্যাকআপ ফাইল সিলেক্ট করুন।');
+            return;
+          }
+
+          handleRestoreFromData(fileContentText);
+        }
+      } catch (err: any) {
+        console.error('FilePicker native error:', err);
+        showStatus('error', 'ফাইল সিলেক্ট করতে সমস্যা হয়েছে: ' + (err.message || err));
+      }
+    } else {
+      fileInputRef.current?.click();
+    }
   };
 
   // Google Drive Cloud State

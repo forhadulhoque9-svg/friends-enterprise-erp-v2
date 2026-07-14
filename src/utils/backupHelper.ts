@@ -223,7 +223,11 @@ export const BackupHelper = {
   // Restore database from an encrypted string
   restoreFromEncryptedData: (encryptedString: string): boolean => {
     try {
-      const rawJson = decryptBackup(encryptedString);
+      let workingString = encryptedString.trim();
+      if (workingString.startsWith('{')) {
+        workingString = btoa(unescape(encodeURIComponent(workingString)));
+      }
+      const rawJson = decryptBackup(workingString);
       const data = JSON.parse(rawJson);
       
       if (data.shops) db.saveShops(data.shops);

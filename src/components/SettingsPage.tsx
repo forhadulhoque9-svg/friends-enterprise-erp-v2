@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Capacitor } from '@capacitor/core';
 import { 
   Shield, 
   Fingerprint, 
@@ -94,6 +95,70 @@ export default function SettingsPage({
     }
   };
 
+  // Native File Picker import handler
+  const handleRestoreFileClick = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { FilePicker } = await import('@capawesome/capacitor-file-picker');
+        const result = await FilePicker.pickFiles({
+          types: ['application/json', 'text/plain', '*/*'],
+          readData: true,
+          limit: 1
+        });
+
+        if (result.files && result.files.length > 0) {
+          const pickedFile = result.files[0];
+          let fileContentText = '';
+
+          if (pickedFile.data) {
+            try {
+              fileContentText = decodeURIComponent(escape(atob(pickedFile.data)));
+            } catch (e) {
+              fileContentText = atob(pickedFile.data);
+            }
+          }
+
+          if (!fileContentText) {
+            alert('ফাইলটি খালি বা পড়া যায়নি!');
+            return;
+          }
+
+          // Validate file extension or contents
+          if (!pickedFile.name.toLowerCase().endsWith('.json') && !fileContentText.trim().startsWith('{')) {
+            alert('দয়া করে একটি বৈধ .json ব্যাকআপ ফাইল সিলেক্ট করুন।');
+            return;
+          }
+
+          let base64Code = '';
+          if (fileContentText.trim().startsWith('{')) {
+            base64Code = btoa(unescape(encodeURIComponent(fileContentText)));
+          } else {
+            base64Code = fileContentText.trim();
+          }
+
+          const currentBackup = onExportDatabase();
+          localStorage.setItem('fe_erp_auto_rollback', currentBackup);
+
+          const success = onImportDatabase(base64Code);
+          setImportSuccess(success);
+          if (success) {
+            alert('ফাইল থেকে ব্যাকআপ সফলভাবে রিস্টোর করা হয়েছে! সিস্টেম রিলোড হচ্ছে...');
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } else {
+            alert('ভুল ব্যাকআপ ফাইল! দয়া করে সঠিক ফ্রেন্ডস এন্টারপ্রাইজ ব্যাকআপ ফাইল দিন।');
+          }
+        }
+      } catch (err: any) {
+        console.error('FilePicker native error:', err);
+        alert('ফাইল সিলেক্ট করতে সমস্যা হয়েছে: ' + (err.message || err));
+      }
+    } else {
+      document.getElementById('json-backup-file-picker')?.click();
+    }
+  };
+
   // JSON File Import Handler
   const handleJsonFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -131,19 +196,58 @@ export default function SettingsPage({
   };
 
   // Download raw JSON Backup file
-  const handleDownloadBackupFile = () => {
+  const handleDownloadBackupFile = async () => {
     const rawCode = onExportDatabase();
     const decodedText = decodeURIComponent(escape(atob(rawCode)));
-    const blob = new Blob([decodedText], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
     const dateStr = new Date().toISOString().split('T')[0];
-    link.href = url;
-    link.download = `friends_enterprise_backup_${dateStr}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const filename = `friends_enterprise_backup_${dateStr}.json`;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
+        const { Share } = await import('@capacitor/share');
+
+        // Write file locally to Cache directory so we can share it
+        const writeResult = await Filesystem.writeFile({
+          path: filename,
+          data: decodedText,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8
+        });
+
+        // Open native share sheet so user can save it to files or share
+        await Share.share({
+          title: 'Friends ERP Backup',
+          text: 'Friends Enterprise ERP Secure Backup File',
+          files: [writeResult.uri],
+          dialogTitle: 'Save or Share Backup File'
+        });
+      } catch (err: any) {
+        console.error('Capacitor native download error:', err);
+        // Fallback to sharing text directly if file write failed
+        try {
+          const { Share } = await import('@capacitor/share');
+          await Share.share({
+            title: 'Friends ERP Backup Text',
+            text: decodedText,
+            dialogTitle: 'Copy or Share Backup Data'
+          });
+        } catch (shareErr) {
+          alert('ফাইল সংরক্ষণ বা শেয়ার করতে ব্যর্থ হয়েছে: ' + (err.message || err));
+        }
+      }
+    } else {
+      // Standard browser download
+      const blob = new Blob([decodedText], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
   };
 
   // Rollback helper
@@ -467,7 +571,7 @@ export default function SettingsPage({
               />
               <button
                 type="button"
-                onClick={() => document.getElementById('json-backup-file-picker')?.click()}
+                onClick={handleRestoreFileClick}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-1.5 cursor-pointer"
               >
                 <Upload className="w-4 h-4" />
